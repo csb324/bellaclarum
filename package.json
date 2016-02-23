@@ -9,6 +9,7 @@
   "author": "csb324@gmail.com",
   "license": "ISC",
   "dependencies": {
+    "csv-parse": "^1.0.2",
     "ent": "^2.2.0",
     "rita": "^1.1.27",
     "twit": "^2.2.2",
