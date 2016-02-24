@@ -2,7 +2,7 @@ var _ = require('underscore');
 _.mixin( require('underscore.deferred') );
 var Twit = require('twit');
 var ent = require('ent');
-var rita = require('../RiTaJS/dist/rita.js');
+var rita = require('rita');
 var ritaCore = rita.RiTa;
 var RiMarkov = rita.RiMarkov;
 
