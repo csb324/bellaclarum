@@ -103,33 +103,33 @@ function getMoreTweets(results, tweets, times) {
 
 function setUpMarkov(tweets) {
   var text = tweets.join(". ");
-  console.log(text);
-
-
   rm.loadText(text);
-  console.log(rm);
-
   return rm;
 }
 
 function tweet(sentences) {
   var myTweet = sentences.pickRemove();
 
-  T.post('statuses/update', { status: myTweet }, function(err, reply) {
-    if (err) {
-      console.log('error:', err);
-      if (sentences.length > 0) {
-        tweet(sentences);
+  if (process.env.NODE_ENV == "production") {
+    T.post('statuses/update', { status: myTweet }, function(err, reply) {
+      if (err) {
+        console.log('error:', err);
+        if (sentences.length > 0) {
+          tweet(sentences);
+        }
+      } else {
+        console.log(myTweet);
+        console.log('tweeted it!');
       }
-    } else {
-      console.log(myTweet);
-      console.log('tweeted it!');
-    }
-  });
+    });
+  } else {
+    console.log(myTweet);
+  }
 }
 
 function run() {
   if (rm.ready()) {
+    console.log("Markov is already set up");
     tweet(rm.generateSentences(10));
 
   } else {
@@ -144,4 +144,13 @@ function run() {
   }
 };
 
+// Tweet every 60 minutes
+setInterval(function () {
+  try {
+    run();
+  }
+  catch (e) {
+    console.log(e);
+  }
+}, 60 * 60 * 1000);
 run();
