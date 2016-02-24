@@ -5,8 +5,10 @@ var ent = require('ent');
 var rita = require('rita');
 var ritaCore = rita.RiTa;
 var rm = new rita.RiMarkov(3);
-
 var T;
+
+var newestID;
+
 if (process.env.NODE_ENV == "production") {
   T = new Twit({
     consumer_key:         process.env.CONSUMER_KEY,
@@ -76,6 +78,7 @@ function getOriginalTweets(lastId) {
 
     var response = {
       lastId: tweets[tweets.length - 1].id,
+      firstId: tweets[0].id,
       tweetsText: tweetsText
     };
 
@@ -102,8 +105,9 @@ function getMoreTweets(results, tweets, times) {
 }
 
 function setUpMarkov(tweets) {
-  var text = tweets.join(". ");
-  rm.loadText(text);
+  _.each(tweets, function(el) {
+    rm.loadText(el);
+  })
   return rm;
 }
 
@@ -136,6 +140,8 @@ function run() {
     var tweets = []
     getOriginalTweets(false).then(function(results) {
       tweets = tweets.concat(results.tweetsText);
+      newestID = results.firstId;
+
       getMoreTweets(results, tweets, 10).then(function(allTweets) {
         setUpMarkov(allTweets);
         tweet(rm.generateSentences(10));
@@ -143,6 +149,57 @@ function run() {
     });
   }
 };
+
+function getLatestTweets() {
+  var dfd = new _.Deferred();
+  var queryOptions = {
+    screen_name: 'clarabellum',
+    count: 200,
+    trim_user: true,
+    exclude_replies: false,
+    include_rts: false,
+    since_id: newestID
+  };
+
+  T.get('statuses/user_timeline', queryOptions, function(err, tweets) {
+    if (err) {
+      console.log('search error:',err);
+    };
+    tweetsText = _.chain(tweets)
+      // decode weird characters
+      .map(function(el) {
+        if (el.retweeted_status) {
+          return ent.decode(el.retweeted_status.text);
+        }
+        else {
+          return ent.decode(el.text);
+        }
+      })
+      .map(function(el) {
+        var isReply = (el.search(/@[^\s]*/) == 0);
+        if (isReply) {
+          return el.replace(/@[^\s]*/, "[REPLY]");
+        } else {
+          return el;
+        }
+      })
+      .filter(function(el) {
+        var noLinks = (el.search(/https?:/) == -1);
+
+        return noLinks;
+      })
+      .uniq()
+      .value();
+
+    newestID = tweets[0].id;
+    dfd.resolve(tweetsText);
+  });
+  return dfd.promise();
+}
+
+function updateMarkov() {
+  getLatestTweets().then(setUpMarkov);
+}
 
 // Tweet every 60 minutes
 setInterval(function () {
@@ -153,4 +210,6 @@ setInterval(function () {
     console.log(e);
   }
 }, 60 * 60 * 1000);
+setInterval(updateMarkov, 60*60*24*1000);
+
 run();
