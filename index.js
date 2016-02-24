@@ -2,9 +2,13 @@ var _ = require('underscore');
 _.mixin( require('underscore.deferred') );
 var Twit = require('twit');
 var ent = require('ent');
-var rita = require('rita');
+var rita = require('../RiTaJS/dist/rita.js');
 var ritaCore = rita.RiTa;
-var rm = new rita.RiMarkov(3);
+var RiMarkov = rita.RiMarkov;
+
+var rm = new RiMarkov(3);
+var rmReplies = new RiMarkov(3);
+
 var T;
 
 var newestID;
@@ -60,14 +64,6 @@ function getOriginalTweets(lastId) {
           return ent.decode(el.text);
         }
       })
-      .map(function(el) {
-        var isReply = (el.search(/@[^\s]*/) == 0);
-        if (isReply) {
-          return el.replace(/@[^\s]*/, "[REPLY]");
-        } else {
-          return el;
-        }
-      })
       .filter(function(el) {
         var noLinks = (el.search(/https?:/) == -1);
 
@@ -104,23 +100,65 @@ function getMoreTweets(results, tweets, times) {
   return dfd.promise();
 }
 
-function setUpMarkov(tweets) {
+function formatTokens(text) {
+  // text = text.replace(/\s/g, "|");
+  // text = text.replace(/([\?!,:\)\"])/g, "|$1");
+  // text = text.replace(/\(/g, "(|");
+  // text = text.replace(/\"([^\s])/g, "\"|$1");
+
+  // text = text.replace(/\|+/g, " ");
+  text = text.toLowerCase();
+
+  return text;
+}
+
+function loadText(tweets) {
+
+  var noreplies = [];
+  var replies = [];
+
   _.each(tweets, function(el) {
-    rm.loadText(el);
-  })
+    el = formatTokens(el);
+
+    if (el.match(/^@\w*?\W/)) {
+      reply = el.replace(/^(@\w*?\W)+/g, "");
+      if (!reply.match(/@\w*?\W/)) {
+        replies.push(reply);
+      }
+    }
+
+    el = el.replace(/^(@\w*?\W)+/, "");
+
+    if (!el.match(/@\w/)) {
+      noreplies.push(el);
+    }
+
+  });
+
+  console.log(noreplies.slice(1,40));
+
+  console.log(replies.length);
+  console.log(noreplies.length);
+
+  rm._loadSentences(noreplies);
+  rmReplies._loadSentences(replies);
+
+  // console.log(rm.sentenceStarts.length);
+  console.log(rm.generateSentences(30));
   return rm;
 }
 
 function tweet(sentences) {
+  console.log(sentences);
+
   var myTweet = sentences.pickRemove();
 
-  if (process.env.NODE_ENV == "production") {
+  // if (process.env.NODE_ENV == "production") {
+
+  if (true) {
     T.post('statuses/update', { status: myTweet }, function(err, reply) {
       if (err) {
         console.log('error:', err);
-        if (sentences.length > 0) {
-          tweet(sentences);
-        }
       } else {
         console.log(myTweet);
         console.log('tweeted it!');
@@ -131,24 +169,6 @@ function tweet(sentences) {
   }
 }
 
-function run() {
-  if (rm.ready()) {
-    console.log("Markov is already set up");
-    tweet(rm.generateSentences(10));
-
-  } else {
-    var tweets = []
-    getOriginalTweets(false).then(function(results) {
-      tweets = tweets.concat(results.tweetsText);
-      newestID = results.firstId;
-
-      getMoreTweets(results, tweets, 10).then(function(allTweets) {
-        setUpMarkov(allTweets);
-        tweet(rm.generateSentences(10));
-      });
-    });
-  }
-};
 
 function getLatestTweets() {
   var dfd = new _.Deferred();
@@ -198,8 +218,31 @@ function getLatestTweets() {
 }
 
 function updateMarkov() {
-  getLatestTweets().then(setUpMarkov);
+  getLatestTweets().then(loadText);
 }
+
+function run() {
+  if (rm.ready()) {
+    console.log("Markov is already set up");
+    tweet(rm.generateSentences(10));
+
+  } else {
+    var tweets = []
+    getOriginalTweets(false).then(function(results) {
+      tweets = tweets.concat(results.tweetsText);
+      newestID = results.firstId;
+
+      getMoreTweets(results, tweets, 3).then(function(allTweets) {
+        // console.log(allTweets);
+        loadText(allTweets);
+
+        console.log(rm.ready());
+        // console.log(rm.generateSentences(10));
+
+      });
+    });
+  }
+};
 
 // Tweet every 60 minutes
 setInterval(function () {
