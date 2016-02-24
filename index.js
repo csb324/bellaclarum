@@ -153,9 +153,7 @@ function tweet(sentences) {
 
   var myTweet = sentences.pickRemove();
 
-  // if (process.env.NODE_ENV == "production") {
-
-  if (true) {
+  if (process.env.NODE_ENV == "production") {
     T.post('statuses/update', { status: myTweet }, function(err, reply) {
       if (err) {
         console.log('error:', err);
@@ -231,14 +229,11 @@ function run() {
     getOriginalTweets(false).then(function(results) {
       tweets = tweets.concat(results.tweetsText);
       newestID = results.firstId;
-
-      getMoreTweets(results, tweets, 3).then(function(allTweets) {
+      getMoreTweets(results, tweets, 10).then(function(allTweets) {
         // console.log(allTweets);
         loadText(allTweets);
-
         console.log(rm.ready());
-        // console.log(rm.generateSentences(10));
-
+        tweet(rm.generateSentences(10));
       });
     });
   }
@@ -253,6 +248,6 @@ setInterval(function () {
     console.log(e);
   }
 }, 60 * 60 * 1000);
-setInterval(updateMarkov, 60*60*24*1000);
 
+setInterval(updateMarkov, 60*60*24*1000);
 run();
