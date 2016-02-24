@@ -18,6 +18,17 @@ if (process.env.NODE_ENV == "production") {
   T = new Twit(require('./config.js'));
 };
 
+
+Array.prototype.pick = function() {
+  return this[Math.floor(Math.random()*this.length)];
+};
+
+Array.prototype.pickRemove = function() {
+  var index = Math.floor(Math.random()*this.length);
+  return this.splice(index,1)[0];
+};
+
+
 function getOriginalTweets(lastId) {
   console.log('searching');
   var dfd = new _.Deferred();
@@ -50,7 +61,7 @@ function getOriginalTweets(lastId) {
       .map(function(el) {
         var isReply = (el.search(/@[^\s]*/) == 0);
         if (isReply) {
-          return el.replace(/@[^\s]*/, "@reply");
+          return el.replace(/@[^\s]*/, "[REPLY]");
         } else {
           return el;
         }
@@ -83,7 +94,7 @@ function getMoreTweets(results, tweets, times) {
     getOriginalTweets(results.lastId).then(function(results2) {
       tweets = tweets.concat(results2.tweetsText);
       getMoreTweets(results2, tweets, (times - 1)).then(function(moreResults) {
-        dfd.resolve(tweets);
+        dfd.resolve(moreResults);
       })
     });
   }
@@ -92,26 +103,45 @@ function getMoreTweets(results, tweets, times) {
 
 function setUpMarkov(tweets) {
   var text = tweets.join(". ");
-  rm.loadText(text);
+  console.log(text);
 
-  console.log("sentences:");
-  var sentences = rm.generateSentences(10);
-  return sentences;
+
+  rm.loadText(text);
+  console.log(rm);
+
+  return rm;
 }
 
-function showTweets() {
-  var tweets = []
+function tweet(sentences) {
+  var myTweet = sentences.pickRemove();
+
+  T.post('statuses/update', { status: myTweet }, function(err, reply) {
+    if (err) {
+      console.log('error:', err);
+      if (sentences.length > 0) {
+        tweet(sentences);
+      }
+    } else {
+      console.log(myTweet);
+      console.log('tweeted it!');
+    }
+  });
+}
+
+function run() {
   if (rm.ready()) {
+    tweet(rm.generateSentences(10));
 
   } else {
+    var tweets = []
     getOriginalTweets(false).then(function(results) {
       tweets = tweets.concat(results.tweetsText);
       getMoreTweets(results, tweets, 10).then(function(allTweets) {
-        console.log(setUpMarkov(allTweets));
+        setUpMarkov(allTweets);
+        tweet(rm.generateSentences(10));
       });
     });
   }
-
 };
 
-showTweets();
+run();
