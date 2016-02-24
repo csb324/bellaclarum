@@ -4,7 +4,7 @@ var Twit = require('twit');
 var ent = require('ent');
 var rita = require('rita');
 var ritaCore = rita.RiTa;
-var rm = rita.RiMarkov;
+var rm = new rita.RiMarkov(3);
 
 var T;
 if (process.env.NODE_ENV == "production") {
@@ -25,7 +25,7 @@ function getOriginalTweets(lastId) {
     screen_name: 'clarabellum',
     count: 200,
     trim_user: true,
-    exclude_replies: true,
+    exclude_replies: false,
     include_rts: false
   };
 
@@ -47,11 +47,18 @@ function getOriginalTweets(lastId) {
           return ent.decode(el.text);
         }
       })
+      .map(function(el) {
+        var isReply = (el.search(/@[^\s]*/) == 0);
+        if (isReply) {
+          return el.replace(/@[^\s]*/, "@reply");
+        } else {
+          return el;
+        }
+      })
       .filter(function(el) {
         var noLinks = (el.search(/https?:/) == -1);
-        var noMentions = (el.search(/@[^\s]/) == -1);
 
-        return noLinks && noMentions;
+        return noLinks;
       })
       .uniq()
       .value();
@@ -66,23 +73,45 @@ function getOriginalTweets(lastId) {
   return dfd.promise();
 }
 
-function showTweets() {
-  var tweets = []
-
-  getOriginalTweets(false).then(function(results) {
-    tweets = tweets.concat(results.tweetsText);
+function getMoreTweets(results, tweets, times) {
+  var dfd = new _.Deferred();
+  console.log(times);
+  if (times == 0) {
+    console.log(tweets.length);
+    dfd.resolve(tweets);
+  } else {
     getOriginalTweets(results.lastId).then(function(results2) {
       tweets = tweets.concat(results2.tweetsText);
-      getOriginalTweets(results2.lastId).then(function(results3) {
-        tweets = tweets.concat(results3.tweetsText);
-        getOriginalTweets(results3.lastId).then(function(results4) {
-          tweets = tweets.concat(results4.tweetsText);
-          console.log(tweets.length);
+      getMoreTweets(results2, tweets, (times - 1)).then(function(moreResults) {
+        dfd.resolve(tweets);
+      })
+    });
+  }
+  return dfd.promise();
+}
 
-        });
+function setUpMarkov(tweets) {
+  var text = tweets.join(". ");
+  rm.loadText(text);
+
+  console.log("sentences:");
+  var sentences = rm.generateSentences(10);
+  return sentences;
+}
+
+function showTweets() {
+  var tweets = []
+  if (rm.ready()) {
+
+  } else {
+    getOriginalTweets(false).then(function(results) {
+      tweets = tweets.concat(results.tweetsText);
+      getMoreTweets(results, tweets, 10).then(function(allTweets) {
+        console.log(setUpMarkov(allTweets));
       });
     });
-  });
-}
+  }
+
+};
 
 showTweets();
